@@ -133,7 +133,7 @@ function PriorityPill({priority}:{priority:Priority}){return <span className={"p
 function TaskRow({t,check,open}:{t:Task;check:()=>void;open:()=>void}){return <div className={"taskRow "+(t.done?"isDone":"")}><button className={t.done?"check yes":"check"} onClick={check} aria-label={t.done?"Mark incomplete":"Mark complete"}>{t.done?"✓":""}</button><button className="taskOpen" onClick={open}><span className="taskTitle">{t.title}</span><span className={"prio "+t.priority.toLowerCase()}>{t.priority}</span><small>{t.minutes}m</small></button></div>}
 function Goal({title,pct}:{title:string;pct:number}){return <div className="goal"><div className="goalTop"><strong>{title}</strong><b>{pct}%</b></div><div className="bar"><i style={{width:pct+"%"}}/></div></div>}
 
-function TaskModal({task,onClose,onSave,onDelete,onFocus}:{task:Task;onClose:()=>void;onSave:(task:Task)=>void;onDelete:(id:number)=>void;onFocus:()=>void}){
+function TaskModal({task,onClose,onSave,onDelete,onFocus}:{task:Task;onClose:()=>void;onSave:(task:Task)=>void;onDelete:(id:string)=>void;onFocus:()=>void}){
  const [draft,setDraft]=useState(task);
  return <div className="modalBackdrop" onMouseDown={onClose}><div className="modal card" onMouseDown={e=>e.stopPropagation()}>
   <div className="modalHeader"><div><span className="eyebrow">TASK</span><h3>Edit task</h3></div><button className="modalClose" onClick={onClose}>×</button></div>
