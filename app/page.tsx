@@ -20,7 +20,7 @@ const seedGoals:Goal[]=[{id:"seed-g1",title:"Launch FocusOS MVP",progress:62},{i
 const navItems=[["Dashboard","⌂"],["Tasks","✓"],["Habits","↻"],["Goals","◎"],["Focus","◉"]] as const;
 
 function FocusOSApp({userId}:{userId:string}){
- const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[goals,setGoals]=useState<Goal[]>(seedGoals),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<string|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState(""),[focusSessionId,setFocusSessionId]=useState<string|null>(null),[focusElapsed,setFocusElapsed]=useState(0),[todayFocus,setTodayFocus]=useState(0),[weekFocus,setWeekFocus]=useState(0),[focusStreak,setFocusStreak]=useState(0),[breakdown,setBreakdown]=useState<{task:Task;steps:{title:string;minutes:number}[]}|null>(null),[breakdownSelected,setBreakdownSelected]=useState<boolean[]>([]),[breakdownLoading,setBreakdownLoading]=useState(false),[breakdownError,setBreakdownError]=useState(""),[plan,setPlan]=useState<{goal:string;days:number;milestones:{title:string;tasks:{title:string;minutes:number;priority:Priority}[]}[]}|null>(null),[planSelected,setPlanSelected]=useState<boolean[]>([]),[planLoading,setPlanLoading]=useState(false),[planError,setPlanError]=useState("");
+ const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[goals,setGoals]=useState<Goal[]>(seedGoals),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<string|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState(""),[focusSessionId,setFocusSessionId]=useState<string|null>(null),[focusElapsed,setFocusElapsed]=useState(0),[todayFocus,setTodayFocus]=useState(0),[weekFocus,setWeekFocus]=useState(0),[focusStreak,setFocusStreak]=useState(0),[breakdown,setBreakdown]=useState<{task:Task;steps:{title:string;minutes:number}[]}|null>(null),[breakdownLoading,setBreakdownLoading]=useState(false),[breakdownError,setBreakdownError]=useState("");
 
  useEffect(()=>{try{const s=JSON.parse(localStorage.getItem("focusos")||"{}");if(s.tasks)setTasks(s.tasks);if(s.habits)setHabits(s.habits);if(s.goals)setGoals(s.goals);if(s.energy)setEnergy(s.energy)}catch{}},[]);
 
@@ -174,42 +174,14 @@ function FocusOSApp({userId}:{userId:string}){
    const response=await fetch("/api/breakdown",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:task.title})});
    const data=await response.json();
    if(!response.ok)throw new Error(data.error||"Could not break down this task.");
-   setBreakdown({task,steps:data.steps});setBreakdownSelected(data.steps.map(()=>true));
+   setBreakdown({task,steps:data.steps});
   }catch(error:any){setBreakdownError(error?.message||"Could not break down this task.");}
   finally{setBreakdownLoading(false);}
  };
  const addBreakdownSteps=async()=>{
   if(!breakdown)return;
-  const selected=breakdown.steps.filter((_,index)=>breakdownSelected[index]);
-  for(const step of selected)await addTask(step.title,breakdown.task.priority,step.minutes);
-  setBreakdown(null);setBreakdownSelected([]);setSelectedTask(null);
- };
- const requestPlan=async(goal:string,days:number)=>{
-  const clean=goal.trim();if(!clean)return;
-  setPlanLoading(true);setPlanError("");
-  try{
-   const response=await fetch("/api/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({goal:clean,days})});
-   const data=await response.json();
-   if(!response.ok)throw new Error(data.error||"Could not create a plan.");
-   const flattened=data.milestones.flatMap((milestone:any)=>milestone.tasks||[]);
-   setPlan({goal:clean,days,milestones:data.milestones});
-   setPlanSelected(flattened.map(()=>true));
-  }catch(error:any){setPlanError(error?.message||"Could not create a plan.");}
-  finally{setPlanLoading(false);}
- };
- const addPlanTasks=async()=>{
-  if(!plan)return;
-  const selectedIndexSet=new Set<number>();
-  let index=0;
-  plan.milestones.forEach(milestone=>milestone.tasks.forEach(()=>{if(planSelected[index])selectedIndexSet.add(index);index++;}));
-  index=0;
-  for(const milestone of plan.milestones){
-   for(const task of milestone.tasks){
-    if(selectedIndexSet.has(index))await addTask(task.title,task.priority,task.minutes);
-    index++;
-   }
-  }
-  setPlan(null);setPlanSelected([]);
+  for(const step of breakdown.steps)await addTask(step.title,breakdown.task.priority,step.minutes);
+  setBreakdown(null);setSelectedTask(null);
  };
  const toggleHabit=async(id:string)=>{
   const habit=habits.find(h=>h.id===id);if(!habit)return;
@@ -278,52 +250,26 @@ function FocusOSApp({userId}:{userId:string}){
 
   {tab==="Habits"&&<div className="card page"><div className="pageIntro"><span className="eyebrow">CONSISTENCY</span><h2>Daily habits</h2><p>Small actions compound. Check them off without overthinking them.</p></div>{habits.map(h=><button className="habitRow large" key={h.id} onClick={()=>toggleHabit(h.id)}><span className={h.completed?"check yes":"check"}>{h.completed?"✓":""}</span><span className={h.completed?"habitName completed":"habitName"}>{h.name}</span></button>)}</div>}
 
-  {tab==="Goals"&&<GoalsPage goals={goals} onPlan={requestPlan}/>}
+  {tab==="Goals"&&<div className="card page"><div className="pageIntro"><span className="eyebrow">DIRECTION</span><h2>Goals & milestones</h2><p>Turn bigger outcomes into visible, manageable progress.</p></div>{goals.map(g=><Goal key={g.id} title={g.title} pct={g.progress}/>)}</div>}
 
   {tab==="Focus"&&<div className="focus"><div className="focusCard card"><span className="eyebrow">FOCUS MODE</span><div className="focusRule">ONE TASK · ONE TIMER</div><h2>{focusedTask?.title||next?.title||"Choose one thing."}</h2><p>{focusedTask?<>This is your only task for the next {focusedTask.minutes} minutes.</>:"Pick one task from your list and start small."}</p><div className="timer">{mm}:{ss}</div><div className="timerActions">{focusedTask&&<button className="secondary" onClick={()=>setSelectedTask(focusedTask)}>Edit task</button>}<button className="primary focusStart" onClick={()=>focusedTask?(running?pauseFocus():startFocus()):startNext()}>{running?"Pause":"Start focus"} <span>{running?"Ⅱ":"▶"}</span></button>{focusedTask&&<button className="secondary" onClick={finishFocused}>Finish task</button>}{focusedTask&&focusSessionId&&<button className="secondary" onClick={stopFocus}>Stop session</button>}</div><div className="focusFooter"><span>◌ Today {formatFocusTime(todayFocus)}</span><span>◌ This week {formatFocusTime(weekFocus)}</span><span>◌ {focusElapsed}s current session</span></div></div></div>}
   </section>
 
-  {selectedTask&&<TaskModal task={selectedTask} onClose={()=>setSelectedTask(null)} onSave={saveTask} onDelete={deleteTask} onFocus={()=>{startTask(selectedTask);setSelectedTask(null)}} onBreakdown={()=>requestBreakdown(selectedTask)}/>} {breakdownLoading&&<div className="modalBackdrop"><div className="modal card breakdownLoading"><span className="eyebrow">FOCUSOS AI</span><h3>Breaking this task down…</h3><p>Turning it into small, actionable steps.</p></div></div>} {breakdownError&&<div className="modalBackdrop" onMouseDown={()=>setBreakdownError("")}><div className="modal card" onMouseDown={e=>e.stopPropagation()}><div className="modalHeader"><div><span className="eyebrow">FOCUSOS AI</span><h3>Breakdown unavailable</h3></div><button className="modalClose" onClick={()=>setBreakdownError("")}>×</button></div><div className="authError">{breakdownError}</div><button className="primary" onClick={()=>setBreakdownError("")}>Close</button></div></div>} {breakdown&&<BreakdownModal breakdown={breakdown} selected={breakdownSelected} onToggle={index=>setBreakdownSelected(v=>v.map((value,i)=>i===index?!value:value))} onClose={()=>{setBreakdown(null);setBreakdownSelected([])}} onAdd={addBreakdownSteps}/>} {planLoading&&<div className="modalBackdrop"><div className="modal card breakdownLoading"><span className="eyebrow">FOCUSOS AI</span><h3>Building your plan…</h3><p>Turning your goal into manageable milestones and tasks.</p></div></div>} {planError&&<div className="modalBackdrop" onMouseDown={()=>setPlanError("")}><div className="modal card" onMouseDown={e=>e.stopPropagation()}><div className="modalHeader"><div><span className="eyebrow">FOCUSOS AI</span><h3>Plan unavailable</h3></div><button className="modalClose" onClick={()=>setPlanError("")}>×</button></div><div className="authError">{planError}</div><button className="primary" onClick={()=>setPlanError("")}>Close</button></div></div>} {plan&&<PlanModal plan={plan} selected={planSelected} onToggle={index=>setPlanSelected(v=>v.map((value,i)=>i===index?!value:value))} onClose={()=>{setPlan(null);setPlanSelected([])}} onAdd={addPlanTasks}/>}
+  {selectedTask&&<TaskModal task={selectedTask} onClose={()=>setSelectedTask(null)} onSave={saveTask} onDelete={deleteTask} onFocus={()=>{startTask(selectedTask);setSelectedTask(null)}} onBreakdown={()=>requestBreakdown(selectedTask)}/>} {breakdownLoading&&<div className="modalBackdrop"><div className="modal card breakdownLoading"><span className="eyebrow">FOCUSOS AI</span><h3>Breaking this task down…</h3><p>Turning it into small, actionable steps.</p></div></div>} {breakdownError&&<div className="modalBackdrop" onMouseDown={()=>setBreakdownError("")}><div className="modal card" onMouseDown={e=>e.stopPropagation()}><div className="modalHeader"><div><span className="eyebrow">FOCUSOS AI</span><h3>Breakdown unavailable</h3></div><button className="modalClose" onClick={()=>setBreakdownError("")}>×</button></div><div className="authError">{breakdownError}</div><button className="primary" onClick={()=>setBreakdownError("")}>Close</button></div></div>} {breakdown&&<BreakdownModal breakdown={breakdown} onClose={()=>setBreakdown(null)} onAdd={addBreakdownSteps}/>}
  </main>;
 }
 
 function Stat({icon,label,value,note}:{icon:string;label:string;value:string;note:string}){return <div className="card stat"><div className="statTop"><span className="statIcon">{icon}</span><span className="eyebrow">{label}</span></div><strong>{value}</strong><span className="statNote">{note}</span></div>}
 function PriorityPill({priority}:{priority:Priority}){return <span className={"prio "+priority.toLowerCase()}>{priority} priority</span>}
 function TaskRow({t,check,open}:{t:Task;check:()=>void;open:()=>void}){return <div className={"taskRow "+(t.done?"isDone":"")}><button className={t.done?"check yes":"check"} onClick={check} aria-label={t.done?"Mark incomplete":"Mark complete"}>{t.done?"✓":""}</button><button className="taskOpen" onClick={open}><span className="taskTitle">{t.title}</span><span className={"prio "+t.priority.toLowerCase()}>{t.priority}</span><small>{t.minutes}m</small></button></div>}
-function GoalsPage({goals,onPlan}:{goals:Goal[];onPlan:(goal:string,days:number)=>void}){
- const [goal,setGoal]=useState("");const [days,setDays]=useState(7);
- return <div className="card page"><div className="pageIntro"><span className="eyebrow">DIRECTION</span><h2>Goals & milestones</h2><p>Turn a bigger outcome into a realistic sequence of manageable work.</p></div>
-  <div className="planBuilder"><div><label>What do you want to achieve?<input value={goal} onChange={e=>setGoal(e.target.value)} placeholder="e.g. Launch my Amazon product"/></label></div><label>Days<select value={days} onChange={e=>setDays(Number(e.target.value))}><option value={3}>3 days</option><option value={7}>7 days</option><option value={14}>14 days</option><option value={30}>30 days</option><option value={60}>60 days</option><option value={90}>90 days</option></select></label><button className="primary" disabled={!goal.trim()} onClick={()=>onPlan(goal,days)}>Plan with AI <span>→</span></button></div>
-  <div className="goalList">{goals.map(g=><Goal key={g.id} title={g.title} pct={g.progress}/>)}</div>
- </div>;
-}
-
 function Goal({title,pct}:{title:string;pct:number}){return <div className="goal"><div className="goalTop"><strong>{title}</strong><b>{pct}%</b></div><div className="bar"><i style={{width:pct+"%"}}/></div></div>}
 
-
-
-function BreakdownModal({breakdown,selected,onToggle,onClose,onAdd}:{breakdown:{task:Task;steps:{title:string;minutes:number}[]};selected:boolean[];onToggle:(index:number)=>void;onClose:()=>void;onAdd:()=>void}){
- const selectedCount=selected.filter(Boolean).length;
- const total=breakdown.steps.reduce((sum,step,index)=>sum+(selected[index]?step.minutes:0),0);
+function BreakdownModal({breakdown,onClose,onAdd}:{breakdown:{task:Task;steps:{title:string;minutes:number}[]};onClose:()=>void;onAdd:()=>void}){
  return <div className="modalBackdrop" onMouseDown={onClose}><div className="modal card breakdownModal" onMouseDown={e=>e.stopPropagation()}>
   <div className="modalHeader"><div><span className="eyebrow">FOCUSOS AI</span><h3>Task breakdown</h3></div><button className="modalClose" onClick={onClose}>×</button></div>
-  <p className="breakdownIntro">Review the suggested steps for <strong>{breakdown.task.title}</strong>. Select only the steps you want to add.</p>
-  <div className="breakdownToolbar"><button className="textButton" onClick={()=>breakdown.steps.forEach((_,index)=>{if(!selected[index])onToggle(index)})}>Select all</button><button className="textButton" onClick={()=>breakdown.steps.forEach((_,index)=>{if(selected[index])onToggle(index)})}>Clear</button><span>{selectedCount} selected · {total} min</span></div>
-  <div className="breakdownList">{breakdown.steps.map((step,index)=><label className={selected[index]?"breakdownStep selected":"breakdownStep"} key={index}><input type="checkbox" checked={Boolean(selected[index])} onChange={()=>onToggle(index)}/><span>{index+1}</span><strong>{step.title}</strong><small>{step.minutes}m</small></label>)}</div>
-  <div className="modalActions"><button className="secondary" onClick={onClose}>Discard</button><button className="primary" disabled={!selectedCount} onClick={onAdd}>Add {selectedCount} tasks</button></div>
- </div></div>;
-}
-
-function PlanModal({plan,selected,onToggle,onClose,onAdd}:{plan:{goal:string;days:number;milestones:{title:string;tasks:{title:string;minutes:number;priority:Priority}[]}[]};selected:boolean[];onToggle:(index:number)=>void;onClose:()=>void;onAdd:()=>void}){
- let index=0;let selectedCount=0;let total=0;
- plan.milestones.forEach(m=>m.tasks.forEach(t=>{if(selected[index]){selectedCount++;total+=t.minutes}index++}));
- index=0;
- return <div className="modalBackdrop" onMouseDown={onClose}><div className="modal card planModal" onMouseDown={e=>e.stopPropagation()}>
-  <div className="modalHeader"><div><span className="eyebrow">FOCUSOS AI</span><h3>Your plan</h3></div><button className="modalClose" onClick={onClose}>×</button></div>
-  <p className="breakdownIntro">A <strong>{plan.days}-day</strong> plan for <strong>{plan.goal}</strong>. Review the work before adding it.</p>
-  <div className="breakdownToolbar"><span>{selectedCount} tasks selected · {total} min</span></div>
-  <div className="planMilestones">{plan.milestones.map((milestone,mIndex)=><div className="planMilestone" key={mIndex}><div className="planMilestoneTitle"><span>{mIndex+1}</span><strong>{milestone.title}</strong></div>{milestone.tasks.map((task,tIndex)=>{const current=index++;return <label className={selected[current]?"breakdownStep selected":"breakdownStep"} key={tIndex}><input type="checkbox" checked={Boolean(selected[current])} onChange={()=>onToggle(current)}/><span>•</span><strong>{task.title}</strong><small>{task.priority} · {task.minutes}m</small></label>})}</div>)}</div>
-  <div className="modalActions"><button className="secondary" onClick={onClose}>Discard</button><button className="primary" disabled={!selectedCount} onClick={onAdd}>Add {selectedCount} tasks</button></div>
+  <p className="breakdownIntro">Suggested steps for <strong>{breakdown.task.title}</strong>. Review them before adding them to your task list.</p>
+  <div className="breakdownList">{breakdown.steps.map((step,index)=><div className="breakdownStep" key={index}><span>{index+1}</span><strong>{step.title}</strong><small>{step.minutes}m</small></div>)}</div>
+  <div className="modalActions"><button className="secondary" onClick={onClose}>Discard</button><button className="primary" onClick={onAdd}>Add {breakdown.steps.length} tasks</button></div>
  </div></div>;
 }
 
