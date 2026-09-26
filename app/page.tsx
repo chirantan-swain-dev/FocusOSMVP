@@ -113,7 +113,7 @@ function FocusOSApp({userId}:{userId:string}){
  useEffect(()=>{
   if(!running||seconds!==0)return;
   setRunning(false);
-  void completeFocusSession(focusElapsed+1,true);
+  void completeFocusSession(focusElapsed,true);
  },[seconds,running]);
 
  const done=tasks.filter(t=>t.done).length,pct=tasks.length?Math.round(done/tasks.length*100):0,completedHabits=habits.filter(h=>h.completed).length;
