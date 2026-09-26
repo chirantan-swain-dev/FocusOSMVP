@@ -4,23 +4,44 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 type Priority="Low"|"Medium"|"High";
-type Task={id:number;title:string;done:boolean;priority:Priority;minutes:number};
+type Task={id:string;title:string;done:boolean;priority:Priority;minutes:number};
 type Habit={id:number;name:string;completed:boolean};
 
 const seedTasks:Task[]=[
-{id:1,title:"Review today's priorities",done:false,priority:"High",minutes:10},
-{id:2,title:"Finish FocusOS landing page",done:false,priority:"High",minutes:45},
-{id:3,title:"Reply to important messages",done:false,priority:"Medium",minutes:20},
-{id:4,title:"Plan tomorrow",done:false,priority:"Low",minutes:10},
-{id:5,title:"Send an email",done:false,priority:"Medium",minutes:20}];
+{id:"seed-1",title:"Review today's priorities",done:false,priority:"High",minutes:10},
+{id:"seed-2",title:"Finish FocusOS landing page",done:false,priority:"High",minutes:45},
+{id:"seed-3",title:"Reply to important messages",done:false,priority:"Medium",minutes:20},
+{id:"seed-4",title:"Plan tomorrow",done:false,priority:"Low",minutes:10},
+{id:"seed-5",title:"Send an email",done:false,priority:"Medium",minutes:20}];
 const seedHabits:Habit[]=[
 {id:1,name:"Drink water",completed:true},{id:2,name:"10-minute walk",completed:false},{id:3,name:"Read / learn",completed:false}];
 const navItems=[["Dashboard","⌂"],["Tasks","✓"],["Habits","↻"],["Goals","◎"],["Focus","◉"]] as const;
 
-function FocusOSApp(){
- const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<number|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState("");
+function FocusOSApp({userId}:{userId:string}){
+ const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<string|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState("");
 
  useEffect(()=>{try{const s=JSON.parse(localStorage.getItem("focusos")||"{}");if(s.tasks)setTasks(s.tasks);if(s.habits)setHabits(s.habits);if(s.energy)setEnergy(s.energy)}catch{}},[]);
+
+ useEffect(()=>{
+  let cancelled=false;
+  const loadTasks=async()=>{
+   if(!supabase)return;
+   const {data,error}=await supabase.from("tasks").select("id,title,done,priority,minutes").eq("user_id",userId).order("created_at",{ascending:true});
+   if(cancelled||error)return;
+   if(data&&data.length){
+    setTasks(data as Task[]);
+    return;
+   }
+   let cached:Task[]=[];
+   try{const s=JSON.parse(localStorage.getItem("focusos")||"{}");if(Array.isArray(s.tasks))cached=s.tasks}catch{}
+   const source=cached.length?cached:seedTasks;
+   const rows=source.map(t=>({user_id:userId,title:t.title,done:t.done,priority:t.priority,minutes:t.minutes}));
+   const {data:inserted}=await supabase.from("tasks").insert(rows).select("id,title,done,priority,minutes").order("created_at",{ascending:true});
+   if(!cancelled&&inserted)setTasks(inserted as Task[]);
+  };
+  loadTasks();
+  return()=>{cancelled=true};
+ },[userId]);
  useEffect(()=>{localStorage.setItem("focusos",JSON.stringify({tasks,habits,energy}))},[tasks,habits,energy]);
 
  useEffect(()=>{
@@ -42,22 +63,32 @@ function FocusOSApp(){
  const focusedTask=focusedTaskId?tasks.find(t=>t.id===focusedTaskId):null;
  const mm=String(Math.floor(seconds/60)).padStart(2,"0"),ss=String(seconds%60).padStart(2,"0");
 
- const addTask=(title:string,priority:Priority="Medium",minutes=20)=>{
+ const addTask=async(title:string,priority:Priority="Medium",minutes=20)=>{
   const clean=title.trim();if(!clean)return;
-  setTasks(v=>[...v,{id:Date.now()+Math.floor(Math.random()*1000),title:clean,done:false,priority,minutes}]);
+  if(supabase){
+   const {data,error}=await supabase.from("tasks").insert({user_id:userId,title:clean,done:false,priority,minutes}).select("id,title,done,priority,minutes").single();
+   if(!error&&data){setTasks(v=>[...v,data as Task]);return}
+  }
+  setTasks(v=>[...v,{id:String(Date.now()+Math.floor(Math.random()*1000)),title:clean,done:false,priority,minutes}]);
  };
  const submitTask=()=>{addTask(newTask);setNewTask("")};
  const quickAdd=()=>{addTask(quickTask);setQuickTask("")};
  const toggleTask=(id:number)=>setTasks(v=>v.map(t=>t.id===id?{...t,done:!t.done}:t));
  const deleteTask=(id:number)=>{setTasks(v=>v.filter(t=>t.id!==id));if(selectedTask?.id===id)setSelectedTask(null)};
- const saveTask=(updated:Task)=>{setTasks(v=>v.map(t=>t.id===updated.id?updated:t));setSelectedTask(null)};
+ const saveTask=async(updated:Task)=>{
+  setTasks(v=>v.map(t=>t.id===updated.id?updated:t));setSelectedTask(null);
+  if(supabase)await supabase.from("tasks").update({title:updated.title,priority:updated.priority,minutes:updated.minutes,done:updated.done}).eq("id",updated.id).eq("user_id",userId);
+ };
  const toggleHabit=(id:number)=>setHabits(v=>v.map(h=>h.id===id?{...h,completed:!h.completed}:h));
 
  const startTask=(task:Task)=>{
   setFocusedTaskId(task.id);setSeconds(task.minutes*60);setRunning(false);setTab("Focus");
  };
  const startNext=()=>{if(next)startTask(next)};
- const finishFocused=()=>{if(focusedTaskId)setTasks(v=>v.map(t=>t.id===focusedTaskId?{...t,done:true}:t));setRunning(false);setFocusedTaskId(null);setSeconds(1500)};
+ const finishFocused=()=>{
+  if(focusedTaskId){setTasks(v=>v.map(t=>t.id===focusedTaskId?{...t,done:true}:t));if(supabase)void supabase.from("tasks").update({done:true}).eq("id",focusedTaskId).eq("user_id",userId)}
+  setRunning(false);setFocusedTaskId(null);setSeconds(1500)
+ };
 
  return <main className="shell">
   <aside className="side"><div className="brand"><b>F</b><span><strong>FocusOS</strong><small>Personal OS</small></span></div><nav>{navItems.map(([label,icon])=><button className={tab===label?"nav active":"nav"} key={label} onClick={()=>setTab(label)}><span className="navIcon">{icon}</span><em>{label}</em></button>)}</nav><div className="sidebox"><div className="sideboxTop"><small>TODAY</small><span>{pct}%</span></div><strong>{done}/{tasks.length} tasks</strong><div className="bar"><i style={{width:pct+"%"}}/></div></div></aside>
@@ -122,7 +153,7 @@ export default function Home(){
   return()=>subscription.unsubscribe();
  },[]);
 
- if(!supabase) return <FocusOSApp/>;
+ if(!supabase) return <FocusOSApp userId={session.user.id}/>;
 
  if(session===undefined) return <div className="authShell"><div className="authCard card"><div className="brand authBrand"><b>F</b><span><strong>FocusOS</strong><small>Personal OS</small></span></div><p>Loading your workspace…</p></div></div>;
 
