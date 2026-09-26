@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 type Priority="Low"|"Medium"|"High";
 type Task={id:number;title:string;done:boolean;priority:Priority;minutes:number};
@@ -16,7 +17,7 @@ const seedHabits:Habit[]=[
 {id:1,name:"Drink water",completed:true},{id:2,name:"10-minute walk",completed:false},{id:3,name:"Read / learn",completed:false}];
 const navItems=[["Dashboard","⌂"],["Tasks","✓"],["Habits","↻"],["Goals","◎"],["Focus","◉"]] as const;
 
-export default function Home(){
+function FocusOSApp(){
  const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<number|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState("");
 
  useEffect(()=>{try{const s=JSON.parse(localStorage.getItem("focusos")||"{}");if(s.tasks)setTasks(s.tasks);if(s.habits)setHabits(s.habits);if(s.energy)setEnergy(s.energy)}catch{}},[]);
@@ -102,4 +103,53 @@ function TaskModal({task,onClose,onSave,onDelete,onFocus}:{task:Task;onClose:()=
   <div className="formGrid"><label>Priority<select value={draft.priority} onChange={e=>setDraft({...draft,priority:e.target.value as Priority})}><option>Low</option><option>Medium</option><option>High</option></select></label><label>Minutes<input type="number" min="5" step="5" value={draft.minutes} onChange={e=>setDraft({...draft,minutes:Math.max(5,Number(e.target.value)||5)})}/></label></div>
   <div className="modalActions"><button className="dangerButton" onClick={()=>onDelete(task.id)}>Delete</button><div><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={()=>onSave(draft)}>Save changes</button><button className="primary" onClick={onFocus}>Start focus</button></div></div>
  </div></div>
+}
+
+
+export default function Home(){
+ const [session,setSession]=useState<any>(undefined);
+ const [authMode,setAuthMode]=useState<"login"|"signup">("login");
+ const [email,setEmail]=useState("");
+ const [password,setPassword]=useState("");
+ const [loading,setLoading]=useState(false);
+ const [error,setError]=useState("");
+ const [message,setMessage]=useState("");
+
+ useEffect(()=>{
+  if(!supabase){setSession(null);return;}
+  supabase.auth.getSession().then(({data})=>setSession(data.session));
+  const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,next)=>setSession(next));
+  return()=>subscription.unsubscribe();
+ },[]);
+
+ if(!supabase) return <FocusOSApp/>;
+
+ if(session===undefined) return <div className="authShell"><div className="authCard card"><div className="brand authBrand"><b>F</b><span><strong>FocusOS</strong><small>Personal OS</small></span></div><p>Loading your workspace…</p></div></div>;
+
+ const submit=async(e:React.FormEvent)=>{
+  e.preventDefault();setLoading(true);setError("");setMessage("");
+  const result=authMode==="login"
+   ? await supabase.auth.signInWithPassword({email,password})
+   : await supabase.auth.signUp({email,password});
+  if(result.error)setError(result.error.message);
+  else if(authMode==="signup" && !result.data.session)setMessage("Account created. Check your email if confirmation is required.");
+  setLoading(false);
+ };
+ if(!session) return <main className="authShell"><div className="authCard card">
+  <div className="brand authBrand"><b>F</b><span><strong>FocusOS</strong><small>Personal OS</small></span></div>
+  <span className="eyebrow">{authMode==="login"?"WELCOME BACK":"GET STARTED"}</span>
+  <h1>{authMode==="login"?"Sign in to FocusOS":"Create your FocusOS account"}</h1>
+  <p className="authIntro">{authMode==="login"?"Your tasks, habits and focus sessions stay synced across devices.":"Create an account to sync your FocusOS workspace across devices."}</p>
+  <form onSubmit={submit} className="authForm">
+   <label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="email"/></label>
+   <label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} autoComplete={authMode==="login"?"current-password":"new-password"}/></label>
+   {error&&<div className="authError">{error}</div>}
+   {message&&<div className="authMessage">{message}</div>}
+   <button className="primary authSubmit" disabled={loading}>{loading?"Please wait…":authMode==="login"?"Sign in":"Create account"}</button>
+  </form>
+  <button className="authSwitch" onClick={()=>{setAuthMode(authMode==="login"?"signup":"login");setError("");setMessage("")}}>
+   {authMode==="login"?"Don't have an account? Create one":"Already have an account? Sign in"}
+  </button>
+ </div></main>;
+ return <FocusOSApp/>;
 }
