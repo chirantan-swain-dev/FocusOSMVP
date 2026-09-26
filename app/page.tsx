@@ -28,6 +28,7 @@ export default function Home(){
    if(v<=1){
     setRunning(false);
     if(focusedTaskId)setTasks(prev=>prev.map(t=>t.id===focusedTaskId?{...t,done:true}:t));
+    setFocusedTaskId(null);
     return 1500;
    }
    return v-1;
