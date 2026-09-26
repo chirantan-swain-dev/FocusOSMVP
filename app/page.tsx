@@ -117,7 +117,30 @@ function FocusOSApp({userId}:{userId:string}){
  },[seconds,running]);
 
  const done=tasks.filter(t=>t.done).length,pct=tasks.length?Math.round(done/tasks.length*100):0,completedHabits=habits.filter(h=>h.completed).length;
- const next=useMemo(()=>tasks.find(t=>!t.done&&t.priority==="High")||tasks.find(t=>!t.done),[tasks]);
+ const recommendation=useMemo(()=>{
+  const open=tasks.filter(t=>!t.done);
+  if(!open.length)return null;
+  const priorityScore=(p:Priority)=>p==="High"?60:p==="Medium"?35:10;
+  const energyScore=(minutes:number)=>{
+   if(energy==="Low")return minutes<=15?30:minutes<=30?12:-10;
+   if(energy==="Medium")return minutes<=30?28:minutes<=45?18:5;
+   return minutes<=45?28:minutes<=60?22:12;
+  };
+  const momentumScore=(minutes:number)=>minutes<=20?16:minutes<=30?10:minutes<=45?5:0;
+  const scored=open.map(task=>{
+   const score=priorityScore(task.priority)+energyScore(task.minutes)+momentumScore(task.minutes);
+   return {task,score};
+  }).sort((a,b)=>b.score-a.score);
+  const chosen=scored[0].task;
+  const reasons:string[]=[];
+  if(chosen.priority==="High")reasons.push("high priority");
+  else if(chosen.priority==="Medium")reasons.push("medium priority");
+  else reasons.push("keeps the workload light");
+  if((energy==="Low"&&chosen.minutes<=15)||(energy==="Medium"&&chosen.minutes<=30)||(energy==="High"&&chosen.minutes<=45))reasons.push("matches your "+energy.toLowerCase()+" energy");
+  if(chosen.minutes<=20)reasons.push("short enough to build momentum");
+  return {task:chosen,reasons};
+ },[tasks,energy]);
+ const next=recommendation?.task||null;
  const focusedTask=focusedTaskId?tasks.find(t=>t.id===focusedTaskId):null;
  const mm=String(Math.floor(seconds/60)).padStart(2,"0"),ss=String(seconds%60).padStart(2,"0");
  const formatFocusTime=(value:number)=>{const h=Math.floor(value/3600),m=Math.floor((value%3600)/60);return h?String(h)+"h "+String(m).padStart(2,"0")+"m":m+"m"};
@@ -196,7 +219,7 @@ function FocusOSApp({userId}:{userId:string}){
   <section className="content"><header><div><div className="eyebrow">SATURDAY, SEPTEMBER 26</div><h1>{tab==="Dashboard"?"Good morning.":tab}</h1>{tab==="Dashboard"&&<p className="headerSub">Let's make today feel manageable.</p>}</div><button className="avatar" onClick={()=>supabase?.auth.signOut()} title="Sign out">CS</button></header>
 
   {tab==="Dashboard"&&<><div className="hero">
-   <div className="card nextCard"><div className="cardLabelRow"><span className="eyebrow">NEXT UP</span>{next&&<PriorityPill priority={next.priority}/>}</div><h2>{next?.title||"Everything is done."}</h2><p>{next?<>A focused <strong>{next.minutes}-minute</strong> step is enough. You don't need to finish everything.</>:"Take a moment to review your day."}</p>{next&&<button className="primary" onClick={startNext}>Start focus <span>→</span></button>}<div className="nextMeta"><span>◷ {next?.minutes||0} min</span><span>•</span><span>{energy} energy</span><span>•</span><span>1 task at a time</span></div></div>
+   <div className="card nextCard"><div className="cardLabelRow"><span className="eyebrow">WHAT SHOULD I DO NEXT?</span>{next&&<PriorityPill priority={next.priority}/>}</div><h2>{next?.title||"Everything is done."}</h2><p>{next?<>FocusOS recommends this <strong>{next.minutes}-minute</strong> step based on your priority, energy and momentum.</>:"You've cleared your open tasks. Take a moment to review your day."}</p>{next&&<div className="recommendationReason"><span>Why this?</span><strong>{recommendation?.reasons.join(" · ")}</strong></div>}{next&&<button className="primary" onClick={startNext}>Start focus <span>→</span></button>}<div className="nextMeta"><span>◷ {next?.minutes||0} min</span><span>•</span><span>{energy} energy</span><span>•</span><span>1 task at a time</span></div></div>
    <div className="card energyCard"><span className="eyebrow">ENERGY CHECK-IN</span><h3>How much capacity do you have?</h3><p>Your answer helps FocusOS choose the right next step.</p><div className="energies">{(["Low","Medium","High"] as const).map(x=><button className={energy===x?"energy selected":"energy"} key={x} onClick={()=>setEnergy(x)}><span>{x==="Low"?"○":x==="Medium"?"◐":"●"}</span>{x}</button>)}</div></div>
   </div>
   <div className="stats"><Stat icon="✓" label="Tasks complete" value={done+"/"+tasks.length} note={pct+"% of today"}/><Stat icon="↻" label="Habits" value={completedHabits+"/"+habits.length} note="daily check-in"/><Stat icon="◉" label="Focus streak" value={focusStreak+" days"} note="completed sessions"/><Stat icon="◷" label="Focus time" value={formatFocusTime(weekFocus)} note="this week"/></div>
