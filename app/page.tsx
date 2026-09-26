@@ -20,7 +20,7 @@ const seedGoals:Goal[]=[{id:"seed-g1",title:"Launch FocusOS MVP",progress:62},{i
 const navItems=[["Dashboard","⌂"],["Tasks","✓"],["Habits","↻"],["Goals","◎"],["Focus","◉"]] as const;
 
 function FocusOSApp({userId}:{userId:string}){
- const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[goals,setGoals]=useState<Goal[]>(seedGoals),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<string|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState("");
+ const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[goals,setGoals]=useState<Goal[]>(seedGoals),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<string|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState(""),[focusSessionId,setFocusSessionId]=useState<string|null>(null),[focusElapsed,setFocusElapsed]=useState(0),[todayFocus,setTodayFocus]=useState(0),[weekFocus,setWeekFocus]=useState(0),[focusStreak,setFocusStreak]=useState(0);
 
  useEffect(()=>{try{const s=JSON.parse(localStorage.getItem("focusos")||"{}");if(s.tasks)setTasks(s.tasks);if(s.habits)setHabits(s.habits);if(s.goals)setGoals(s.goals);if(s.energy)setEnergy(s.energy)}catch{}},[]);
 
@@ -73,23 +73,59 @@ function FocusOSApp({userId}:{userId:string}){
  },[userId]);
 
  useEffect(()=>{
+  let cancelled=false;
+  const loadFocusStats=async()=>{
+   if(!supabase)return;
+   const now=new Date();
+   const todayStart=new Date(now);todayStart.setHours(0,0,0,0);
+   const weekStart=new Date(todayStart);weekStart.setDate(weekStart.getDate()-6);
+   const historyStart=new Date(todayStart);historyStart.setDate(historyStart.getDate()-30);
+   const {data,error}=await supabase.from("focus_sessions").select("duration_seconds,completed,started_at,ended_at").eq("user_id",userId).eq("completed",true).gte("started_at",historyStart.toISOString());
+   if(cancelled||error)return;
+   const rows=data||[];
+   let today=0,week=0;
+   const days=new Set<string>();
+   rows.forEach((row:any)=>{
+    const started=new Date(row.started_at);
+    const duration=Number(row.duration_seconds)||0;
+    if(started>=todayStart)today+=duration;
+    if(started>=weekStart)week+=duration;
+    days.add(started.toLocaleDateString("en-CA"));
+   });
+   let streak=0;
+   const cursor=new Date(todayStart);
+   while(days.has(cursor.toLocaleDateString("en-CA"))){streak++;cursor.setDate(cursor.getDate()-1);}
+   setTodayFocus(today);setWeekFocus(week);setFocusStreak(streak);
+  };
+  loadFocusStats();
+  return()=>{cancelled=true};
+ },[userId,focusSessionId]);
+
+ useEffect(()=>{
   if(!running)return;
-  const timer=setInterval(()=>setSeconds(v=>{
-   if(v<=1){
-    setRunning(false);
-    if(focusedTaskId){setTasks(prev=>prev.map(t=>t.id===focusedTaskId?{...t,done:true}:t));if(supabase)void supabase.from("tasks").update({done:true}).eq("id",focusedTaskId).eq("user_id",userId);}
-    setFocusedTaskId(null);
-    return 1500;
-   }
-   return v-1;
-  }),1000);
+  const timer=setInterval(()=>{
+   setSeconds(v=>{
+    if(v<=1){
+     setRunning(false);
+     setFocusElapsed(e=>{
+      const total=e+1;
+      void completeFocusSession(total,true);
+      return total;
+     });
+     return 0;
+    }
+    return v-1;
+   });
+   setFocusElapsed(v=>v+1);
+  },1000);
   return()=>clearInterval(timer);
- },[running,focusedTaskId]);
+ },[running]);
 
  const done=tasks.filter(t=>t.done).length,pct=tasks.length?Math.round(done/tasks.length*100):0,completedHabits=habits.filter(h=>h.completed).length;
  const next=useMemo(()=>tasks.find(t=>!t.done&&t.priority==="High")||tasks.find(t=>!t.done),[tasks]);
  const focusedTask=focusedTaskId?tasks.find(t=>t.id===focusedTaskId):null;
  const mm=String(Math.floor(seconds/60)).padStart(2,"0"),ss=String(seconds%60).padStart(2,"0");
+ const formatFocusTime=(value:number)=>{const h=Math.floor(value/3600),m=Math.floor((value%3600)/60);return h?String(h)+"h "+String(m).padStart(2,"0")+"m":m+"m"};
 
  const addTask=async(title:string,priority:Priority="Medium",minutes=20)=>{
   const clean=title.trim();if(!clean)return;
@@ -121,12 +157,42 @@ function FocusOSApp({userId}:{userId:string}){
  };
 
  const startTask=(task:Task)=>{
-  setFocusedTaskId(task.id);setSeconds(task.minutes*60);setRunning(false);setTab("Focus");
+  setFocusedTaskId(task.id);setSeconds(task.minutes*60);setFocusElapsed(0);setFocusSessionId(null);setRunning(false);setTab("Focus");
  };
  const startNext=()=>{if(next)startTask(next)};
- const finishFocused=()=>{
-  if(focusedTaskId){setTasks(v=>v.map(t=>t.id===focusedTaskId?{...t,done:true}:t));if(supabase)void supabase.from("tasks").update({done:true}).eq("id",focusedTaskId).eq("user_id",userId)}
-  setRunning(false);setFocusedTaskId(null);setSeconds(1500)
+ const startFocus=async()=>{
+  if(!focusedTaskId)return;
+  if(focusSessionId){setRunning(true);return}
+  if(supabase){
+   const {data,error}=await supabase.from("focus_sessions").insert({user_id:userId,task_id:focusedTaskId,duration_seconds:0,completed:false,started_at:new Date().toISOString()}).select("id").single();
+   if(error||!data)return;
+   setFocusSessionId(data.id);
+  }
+  setRunning(true);
+ };
+ const updateFocusSession=async(duration:number,completed:boolean)=>{
+  if(!supabase||!focusSessionId)return;
+  await supabase.from("focus_sessions").update({duration_seconds:duration,completed,ended_at:completed?new Date().toISOString():null}).eq("id",focusSessionId).eq("user_id",userId);
+ };
+ const completeFocusSession=async(duration:number,completed:boolean)=>{
+  await updateFocusSession(duration,completed);
+  if(completed&&focusedTaskId){
+   setTasks(v=>v.map(t=>t.id===focusedTaskId?{...t,done:true}:t));
+   if(supabase)void supabase.from("tasks").update({done:true}).eq("id",focusedTaskId).eq("user_id",userId);
+  }
+  setFocusSessionId(null);setFocusedTaskId(null);setFocusElapsed(0);setSeconds(1500);
+ };
+ const pauseFocus=async()=>{
+  setRunning(false);
+  await updateFocusSession(focusElapsed,false);
+ };
+ const stopFocus=async()=>{
+  setRunning(false);
+  await completeFocusSession(focusElapsed,false);
+ };
+ const finishFocused=async()=>{
+  setRunning(false);
+  await completeFocusSession(focusElapsed,true);
  };
 
  return <main className="shell">
@@ -138,7 +204,7 @@ function FocusOSApp({userId}:{userId:string}){
    <div className="card nextCard"><div className="cardLabelRow"><span className="eyebrow">NEXT UP</span>{next&&<PriorityPill priority={next.priority}/>}</div><h2>{next?.title||"Everything is done."}</h2><p>{next?<>A focused <strong>{next.minutes}-minute</strong> step is enough. You don't need to finish everything.</>:"Take a moment to review your day."}</p>{next&&<button className="primary" onClick={startNext}>Start focus <span>→</span></button>}<div className="nextMeta"><span>◷ {next?.minutes||0} min</span><span>•</span><span>{energy} energy</span><span>•</span><span>1 task at a time</span></div></div>
    <div className="card energyCard"><span className="eyebrow">ENERGY CHECK-IN</span><h3>How much capacity do you have?</h3><p>Your answer helps FocusOS choose the right next step.</p><div className="energies">{(["Low","Medium","High"] as const).map(x=><button className={energy===x?"energy selected":"energy"} key={x} onClick={()=>setEnergy(x)}><span>{x==="Low"?"○":x==="Medium"?"◐":"●"}</span>{x}</button>)}</div></div>
   </div>
-  <div className="stats"><Stat icon="✓" label="Tasks complete" value={done+"/"+tasks.length} note={pct+"% of today"}/><Stat icon="↻" label="Habits" value={completedHabits+"/"+habits.length} note="daily check-in"/><Stat icon="◉" label="Focus streak" value="4 days" note="keep it simple"/><Stat icon="◷" label="Focus time" value="1h 20m" note="this week"/></div>
+  <div className="stats"><Stat icon="✓" label="Tasks complete" value={done+"/"+tasks.length} note={pct+"% of today"}/><Stat icon="↻" label="Habits" value={completedHabits+"/"+habits.length} note="daily check-in"/><Stat icon="◉" label="Focus streak" value={focusStreak+" days"} note="completed sessions"/><Stat icon="◷" label="Focus time" value={formatFocusTime(weekFocus)} note="this week"/></div>
 
   <div className="quickAdd card"><span className="quickIcon">＋</span><input value={quickTask} onChange={e=>setQuickTask(e.target.value)} onKeyDown={e=>e.key==="Enter"&&quickAdd()} placeholder="Quick add — get something out of your head"/><button className="primary" onClick={quickAdd}>Add</button></div>
 
@@ -153,7 +219,7 @@ function FocusOSApp({userId}:{userId:string}){
 
   {tab==="Goals"&&<div className="card page"><div className="pageIntro"><span className="eyebrow">DIRECTION</span><h2>Goals & milestones</h2><p>Turn bigger outcomes into visible, manageable progress.</p></div>{goals.map(g=><Goal key={g.id} title={g.title} pct={g.progress}/>)}</div>}
 
-  {tab==="Focus"&&<div className="focus"><div className="focusCard card"><span className="eyebrow">FOCUS MODE</span><div className="focusRule">ONE TASK · ONE TIMER</div><h2>{focusedTask?.title||next?.title||"Choose one thing."}</h2><p>{focusedTask?<>This is your only task for the next {focusedTask.minutes} minutes.</>:"Pick one task from your list and start small."}</p><div className="timer">{mm}:{ss}</div><div className="timerActions">{focusedTask&&<button className="secondary" onClick={()=>setSelectedTask(focusedTask)}>Edit task</button>}<button className="primary focusStart" onClick={()=>focusedTask?setRunning(!running):startNext()}>{running?"Pause":"Start focus"} <span>{running?"Ⅱ":"▶"}</span></button>{focusedTask&&<button className="secondary" onClick={finishFocused}>Finish task</button>}</div><div className="focusFooter"><span>◌ Notifications off</span><span>◌ One task only</span><span>◌ No pressure to finish</span></div></div></div>}
+  {tab==="Focus"&&<div className="focus"><div className="focusCard card"><span className="eyebrow">FOCUS MODE</span><div className="focusRule">ONE TASK · ONE TIMER</div><h2>{focusedTask?.title||next?.title||"Choose one thing."}</h2><p>{focusedTask?<>This is your only task for the next {focusedTask.minutes} minutes.</>:"Pick one task from your list and start small."}</p><div className="timer">{mm}:{ss}</div><div className="timerActions">{focusedTask&&<button className="secondary" onClick={()=>setSelectedTask(focusedTask)}>Edit task</button>}<button className="primary focusStart" onClick={()=>focusedTask?(running?pauseFocus():startFocus()):startNext()}>{running?"Pause":"Start focus"} <span>{running?"Ⅱ":"▶"}</span></button>{focusedTask&&<button className="secondary" onClick={finishFocused}>Finish task</button>}{focusedTask&&focusSessionId&&<button className="secondary" onClick={stopFocus}>Stop session</button>}</div><div className="focusFooter"><span>◌ Today {formatFocusTime(todayFocus)}</span><span>◌ This week {formatFocusTime(weekFocus)}</span><span>◌ {focusElapsed}s current session</span></div></div></div>}
   </section>
 
   {selectedTask&&<TaskModal task={selectedTask} onClose={()=>setSelectedTask(null)} onSave={saveTask} onDelete={deleteTask} onFocus={()=>{startTask(selectedTask);setSelectedTask(null)}}/>}
