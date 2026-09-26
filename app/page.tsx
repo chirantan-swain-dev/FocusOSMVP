@@ -104,22 +104,17 @@ function FocusOSApp({userId}:{userId:string}){
  useEffect(()=>{
   if(!running)return;
   const timer=setInterval(()=>{
-   setSeconds(v=>{
-    if(v<=1){
-     setRunning(false);
-     setFocusElapsed(e=>{
-      const total=e+1;
-      void completeFocusSession(total,true);
-      return total;
-     });
-     return 0;
-    }
-    return v-1;
-   });
+   setSeconds(v=>v>0?v-1:0);
    setFocusElapsed(v=>v+1);
   },1000);
   return()=>clearInterval(timer);
  },[running]);
+
+ useEffect(()=>{
+  if(!running||seconds!==0)return;
+  setRunning(false);
+  void completeFocusSession(focusElapsed+1,true);
+ },[seconds,running]);
 
  const done=tasks.filter(t=>t.done).length,pct=tasks.length?Math.round(done/tasks.length*100):0,completedHabits=habits.filter(h=>h.completed).length;
  const next=useMemo(()=>tasks.find(t=>!t.done&&t.priority==="High")||tasks.find(t=>!t.done),[tasks]);
