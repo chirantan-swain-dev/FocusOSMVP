@@ -18,3 +18,6 @@
 @media(max-width:600px){.authShell{padding:14px}.authCard{padding:24px}}
 
 .recommendationReason{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;padding:9px 11px;border:1px solid #e5e6fb;background:#fafaff;border-radius:10px;color:#778197;font-size:11px}.recommendationReason span{font-weight:800;color:#5556c9}.recommendationReason strong{font-weight:650;color:#5f687b}
+
+.breakdownModal{width:min(620px,100%)}.breakdownIntro{margin-bottom:16px}.breakdownList{border:1px solid var(--line);border-radius:12px;overflow:hidden}.breakdownStep{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:13px;border-bottom:1px solid var(--line);font-size:12px}.breakdownStep:last-child{border-bottom:0}.breakdownStep>span{width:24px;height:24px;border-radius:8px;background:#f0f1ff;color:var(--primary);display:grid;place-items:center;font-size:10px;font-weight:800}.breakdownStep strong{font-weight:650}.breakdownStep small{color:var(--muted);font-size:10px}.breakdownLoading{text-align:center;padding:36px}.breakdownLoading h3{font-size:21px;margin:9px 0 6px}.breakdownLoading p{margin-bottom:0}
+@media(max-width:600px){.breakdownStep{grid-template-columns:26px 1fr auto}.breakdownModal .modalActions{display:flex;flex-direction:row;align-items:center}.breakdownModal .modalActions .primary{flex:1}}
