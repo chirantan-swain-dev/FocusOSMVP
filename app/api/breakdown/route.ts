@@ -33,8 +33,12 @@ export async function POST(request: Request) {
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    return NextResponse.json({ error: "OpenAI request failed.", detail }, { status: 502 });
+    const detail = await response.json().catch(() => null);
+    const message = detail?.error?.message || "OpenAI request failed.";
+    return NextResponse.json(
+      { error: `OpenAI request failed: ${message}`, status: response.status },
+      { status: 502 }
+    );
   }
 
   const data = await response.json();
