@@ -128,6 +128,7 @@ export default function Home(){
 
  const submit=async(e:React.FormEvent)=>{
   e.preventDefault();setLoading(true);setError("");setMessage("");
+  if (!supabase) { setError("Supabase is not configured."); setLoading(false); return; }
   const result=authMode==="login"
    ? await supabase.auth.signInWithPassword({email,password})
    : await supabase.auth.signUp({email,password});
