@@ -22,7 +22,7 @@ export async function POST(request: Request) {
         {
           role: "system",
           content:
-            "You are FocusOS, an ADHD-friendly productivity assistant. Break a vague task into 3 to 7 concrete, independently actionable steps. Keep steps small, specific, sequential, and realistic. Do not add motivational filler. Return ONLY valid JSON with this shape: {"steps":[{"title":"...","minutes":10}]} . Minutes must be an integer from 5 to 60.",
+            "You are FocusOS, an ADHD-friendly productivity assistant. Break a vague task into 3 to 7 concrete, independently actionable steps. Keep steps small, specific, sequential, and realistic. Do not add motivational filler. Return ONLY valid JSON with this shape: {steps:[{title:string,minutes:10}]} . Minutes must be an integer from 5 to 60.",
         },
         {
           role: "user",
