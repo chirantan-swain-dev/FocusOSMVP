@@ -190,5 +190,5 @@ export default function Home(){
    {authMode==="login"?"Don't have an account? Create one":"Already have an account? Sign in"}
   </button>
  </div></main>;
- return <FocusOSApp/>;
+ return <FocusOSApp userId={session.user.id}/>;
 }
