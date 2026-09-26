@@ -20,7 +20,7 @@ const seedGoals:Goal[]=[{id:"seed-g1",title:"Launch FocusOS MVP",progress:62},{i
 const navItems=[["Dashboard","⌂"],["Tasks","✓"],["Habits","↻"],["Goals","◎"],["Focus","◉"]] as const;
 
 function FocusOSApp({userId}:{userId:string}){
- const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[goals,setGoals]=useState<Goal[]>(seedGoals),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<string|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState(""),[focusSessionId,setFocusSessionId]=useState<string|null>(null),[focusElapsed,setFocusElapsed]=useState(0),[todayFocus,setTodayFocus]=useState(0),[weekFocus,setWeekFocus]=useState(0),[focusStreak,setFocusStreak]=useState(0),[breakdown,setBreakdown]=useState<{task:Task;steps:{title:string;minutes:number}[]}|null>(null),[breakdownLoading,setBreakdownLoading]=useState(false),[breakdownError,setBreakdownError]=useState("");
+ const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[goals,setGoals]=useState<Goal[]>(seedGoals),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<string|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState(""),[focusSessionId,setFocusSessionId]=useState<string|null>(null),[focusElapsed,setFocusElapsed]=useState(0),[todayFocus,setTodayFocus]=useState(0),[weekFocus,setWeekFocus]=useState(0),[focusStreak,setFocusStreak]=useState(0),[breakdown,setBreakdown]=useState<{task:Task;steps:{title:string;minutes:number}[]}|null>(null),[breakdownSelected,setBreakdownSelected]=useState<boolean[]>([]),[breakdownLoading,setBreakdownLoading]=useState(false),[breakdownError,setBreakdownError]=useState("");
 
  useEffect(()=>{try{const s=JSON.parse(localStorage.getItem("focusos")||"{}");if(s.tasks)setTasks(s.tasks);if(s.habits)setHabits(s.habits);if(s.goals)setGoals(s.goals);if(s.energy)setEnergy(s.energy)}catch{}},[]);
 
@@ -174,14 +174,15 @@ function FocusOSApp({userId}:{userId:string}){
    const response=await fetch("/api/breakdown",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:task.title})});
    const data=await response.json();
    if(!response.ok)throw new Error(data.error||"Could not break down this task.");
-   setBreakdown({task,steps:data.steps});
+   setBreakdown({task,steps:data.steps});setBreakdownSelected(data.steps.map(()=>true));
   }catch(error:any){setBreakdownError(error?.message||"Could not break down this task.");}
   finally{setBreakdownLoading(false);}
  };
  const addBreakdownSteps=async()=>{
   if(!breakdown)return;
-  for(const step of breakdown.steps)await addTask(step.title,breakdown.task.priority,step.minutes);
-  setBreakdown(null);setSelectedTask(null);
+  const selected=breakdown.steps.filter((_,index)=>breakdownSelected[index]);
+  for(const step of selected)await addTask(step.title,breakdown.task.priority,step.minutes);
+  setBreakdown(null);setBreakdownSelected([]);setSelectedTask(null);
  };
  const toggleHabit=async(id:string)=>{
   const habit=habits.find(h=>h.id===id);if(!habit)return;
@@ -264,12 +265,15 @@ function PriorityPill({priority}:{priority:Priority}){return <span className={"p
 function TaskRow({t,check,open}:{t:Task;check:()=>void;open:()=>void}){return <div className={"taskRow "+(t.done?"isDone":"")}><button className={t.done?"check yes":"check"} onClick={check} aria-label={t.done?"Mark incomplete":"Mark complete"}>{t.done?"✓":""}</button><button className="taskOpen" onClick={open}><span className="taskTitle">{t.title}</span><span className={"prio "+t.priority.toLowerCase()}>{t.priority}</span><small>{t.minutes}m</small></button></div>}
 function Goal({title,pct}:{title:string;pct:number}){return <div className="goal"><div className="goalTop"><strong>{title}</strong><b>{pct}%</b></div><div className="bar"><i style={{width:pct+"%"}}/></div></div>}
 
-function BreakdownModal({breakdown,onClose,onAdd}:{breakdown:{task:Task;steps:{title:string;minutes:number}[]};onClose:()=>void;onAdd:()=>void}){
+function BreakdownModal({breakdown,selected,onToggle,onClose,onAdd}:{breakdown:{task:Task;steps:{title:string;minutes:number}[]};selected:boolean[];onToggle:(index:number)=>void;onClose:()=>void;onAdd:()=>void}){
+ const selectedCount=selected.filter(Boolean).length;
+ const total=breakdown.steps.reduce((sum,step,index)=>sum+(selected[index]?step.minutes:0),0);
  return <div className="modalBackdrop" onMouseDown={onClose}><div className="modal card breakdownModal" onMouseDown={e=>e.stopPropagation()}>
   <div className="modalHeader"><div><span className="eyebrow">FOCUSOS AI</span><h3>Task breakdown</h3></div><button className="modalClose" onClick={onClose}>×</button></div>
-  <p className="breakdownIntro">Suggested steps for <strong>{breakdown.task.title}</strong>. Review them before adding them to your task list.</p>
-  <div className="breakdownList">{breakdown.steps.map((step,index)=><div className="breakdownStep" key={index}><span>{index+1}</span><strong>{step.title}</strong><small>{step.minutes}m</small></div>)}</div>
-  <div className="modalActions"><button className="secondary" onClick={onClose}>Discard</button><button className="primary" onClick={onAdd}>Add {breakdown.steps.length} tasks</button></div>
+  <p className="breakdownIntro">Review the suggested steps for <strong>{breakdown.task.title}</strong>. Select only the steps you want to add.</p>
+  <div className="breakdownToolbar"><button className="textButton" onClick={()=>breakdown.steps.forEach((_,index)=>{if(!selected[index])onToggle(index)})}>Select all</button><button className="textButton" onClick={()=>breakdown.steps.forEach((_,index)=>{if(selected[index])onToggle(index)})}>Clear</button><span>{selectedCount} selected · {total} min</span></div>
+  <div className="breakdownList">{breakdown.steps.map((step,index)=><label className={selected[index]?"breakdownStep selected":"breakdownStep"} key={index}><input type="checkbox" checked={Boolean(selected[index])} onChange={()=>onToggle(index)}/><span>{index+1}</span><strong>{step.title}</strong><small>{step.minutes}m</small></label>)}</div>
+  <div className="modalActions"><button className="secondary" onClick={onClose}>Discard</button><button className="primary" disabled={!selectedCount} onClick={onAdd}>Add {selectedCount} tasks</button></div>
  </div></div>;
 }
 
