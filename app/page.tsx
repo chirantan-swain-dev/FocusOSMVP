@@ -20,7 +20,7 @@ const seedGoals:Goal[]=[{id:"seed-g1",title:"Launch FocusOS MVP",progress:62},{i
 const navItems=[["Dashboard","⌂"],["Tasks","✓"],["Habits","↻"],["Goals","◎"],["Focus","◉"]] as const;
 
 function FocusOSApp({userId}:{userId:string}){
- const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[goals,setGoals]=useState<Goal[]>(seedGoals),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<string|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState(""),[focusSessionId,setFocusSessionId]=useState<string|null>(null),[focusElapsed,setFocusElapsed]=useState(0),[todayFocus,setTodayFocus]=useState(0),[weekFocus,setWeekFocus]=useState(0),[focusStreak,setFocusStreak]=useState(0);
+ const [tab,setTab]=useState("Dashboard"),[energy,setEnergy]=useState<"Low"|"Medium"|"High">("Medium"),[tasks,setTasks]=useState<Task[]>(seedTasks),[habits,setHabits]=useState<Habit[]>(seedHabits),[goals,setGoals]=useState<Goal[]>(seedGoals),[newTask,setNewTask]=useState(""),[seconds,setSeconds]=useState(1500),[running,setRunning]=useState(false),[focusedTaskId,setFocusedTaskId]=useState<string|null>(null),[selectedTask,setSelectedTask]=useState<Task|null>(null),[quickTask,setQuickTask]=useState(""),[focusSessionId,setFocusSessionId]=useState<string|null>(null),[focusElapsed,setFocusElapsed]=useState(0),[todayFocus,setTodayFocus]=useState(0),[weekFocus,setWeekFocus]=useState(0),[focusStreak,setFocusStreak]=useState(0),[breakdown,setBreakdown]=useState<{task:Task;steps:{title:string;minutes:number}[]}|null>(null),[breakdownLoading,setBreakdownLoading]=useState(false),[breakdownError,setBreakdownError]=useState("");
 
  useEffect(()=>{try{const s=JSON.parse(localStorage.getItem("focusos")||"{}");if(s.tasks)setTasks(s.tasks);if(s.habits)setHabits(s.habits);if(s.goals)setGoals(s.goals);if(s.energy)setEnergy(s.energy)}catch{}},[]);
 
@@ -168,6 +168,21 @@ function FocusOSApp({userId}:{userId:string}){
   setTasks(v=>v.map(t=>t.id===updated.id?updated:t));setSelectedTask(null);
   if(supabase)await supabase.from("tasks").update({title:updated.title,priority:updated.priority,minutes:updated.minutes,done:updated.done}).eq("id",updated.id).eq("user_id",userId);
  };
+ const requestBreakdown=async(task:Task)=>{
+  setBreakdownLoading(true);setBreakdownError("");
+  try{
+   const response=await fetch("/api/breakdown",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:task.title})});
+   const data=await response.json();
+   if(!response.ok)throw new Error(data.error||"Could not break down this task.");
+   setBreakdown({task,steps:data.steps});
+  }catch(error:any){setBreakdownError(error?.message||"Could not break down this task.");}
+  finally{setBreakdownLoading(false);}
+ };
+ const addBreakdownSteps=async()=>{
+  if(!breakdown)return;
+  for(const step of breakdown.steps)await addTask(step.title,breakdown.task.priority,step.minutes);
+  setBreakdown(null);setSelectedTask(null);
+ };
  const toggleHabit=async(id:string)=>{
   const habit=habits.find(h=>h.id===id);if(!habit)return;
   const completed=!habit.completed;setHabits(v=>v.map(h=>h.id===id?{...h,completed}:h));
@@ -240,7 +255,7 @@ function FocusOSApp({userId}:{userId:string}){
   {tab==="Focus"&&<div className="focus"><div className="focusCard card"><span className="eyebrow">FOCUS MODE</span><div className="focusRule">ONE TASK · ONE TIMER</div><h2>{focusedTask?.title||next?.title||"Choose one thing."}</h2><p>{focusedTask?<>This is your only task for the next {focusedTask.minutes} minutes.</>:"Pick one task from your list and start small."}</p><div className="timer">{mm}:{ss}</div><div className="timerActions">{focusedTask&&<button className="secondary" onClick={()=>setSelectedTask(focusedTask)}>Edit task</button>}<button className="primary focusStart" onClick={()=>focusedTask?(running?pauseFocus():startFocus()):startNext()}>{running?"Pause":"Start focus"} <span>{running?"Ⅱ":"▶"}</span></button>{focusedTask&&<button className="secondary" onClick={finishFocused}>Finish task</button>}{focusedTask&&focusSessionId&&<button className="secondary" onClick={stopFocus}>Stop session</button>}</div><div className="focusFooter"><span>◌ Today {formatFocusTime(todayFocus)}</span><span>◌ This week {formatFocusTime(weekFocus)}</span><span>◌ {focusElapsed}s current session</span></div></div></div>}
   </section>
 
-  {selectedTask&&<TaskModal task={selectedTask} onClose={()=>setSelectedTask(null)} onSave={saveTask} onDelete={deleteTask} onFocus={()=>{startTask(selectedTask);setSelectedTask(null)}}/>}
+  {selectedTask&&<TaskModal task={selectedTask} onClose={()=>setSelectedTask(null)} onSave={saveTask} onDelete={deleteTask} onFocus={()=>{startTask(selectedTask);setSelectedTask(null)}} onBreakdown={()=>requestBreakdown(selectedTask)}/>} {breakdownLoading&&<div className="modalBackdrop"><div className="modal card breakdownLoading"><span className="eyebrow">FOCUSOS AI</span><h3>Breaking this task down…</h3><p>Turning it into small, actionable steps.</p></div></div>} {breakdownError&&<div className="modalBackdrop" onMouseDown={()=>setBreakdownError("")}><div className="modal card" onMouseDown={e=>e.stopPropagation()}><div className="modalHeader"><div><span className="eyebrow">FOCUSOS AI</span><h3>Breakdown unavailable</h3></div><button className="modalClose" onClick={()=>setBreakdownError("")}>×</button></div><div className="authError">{breakdownError}</div><button className="primary" onClick={()=>setBreakdownError("")}>Close</button></div></div>} {breakdown&&<BreakdownModal breakdown={breakdown} onClose={()=>setBreakdown(null)} onAdd={addBreakdownSteps}/>} }
  </main>;
 }
 
@@ -249,13 +264,22 @@ function PriorityPill({priority}:{priority:Priority}){return <span className={"p
 function TaskRow({t,check,open}:{t:Task;check:()=>void;open:()=>void}){return <div className={"taskRow "+(t.done?"isDone":"")}><button className={t.done?"check yes":"check"} onClick={check} aria-label={t.done?"Mark incomplete":"Mark complete"}>{t.done?"✓":""}</button><button className="taskOpen" onClick={open}><span className="taskTitle">{t.title}</span><span className={"prio "+t.priority.toLowerCase()}>{t.priority}</span><small>{t.minutes}m</small></button></div>}
 function Goal({title,pct}:{title:string;pct:number}){return <div className="goal"><div className="goalTop"><strong>{title}</strong><b>{pct}%</b></div><div className="bar"><i style={{width:pct+"%"}}/></div></div>}
 
-function TaskModal({task,onClose,onSave,onDelete,onFocus}:{task:Task;onClose:()=>void;onSave:(task:Task)=>void;onDelete:(id:string)=>void;onFocus:()=>void}){
+function BreakdownModal({breakdown,onClose,onAdd}:{breakdown:{task:Task;steps:{title:string;minutes:number}[]};onClose:()=>void;onAdd:()=>void}){
+ return <div className="modalBackdrop" onMouseDown={onClose}><div className="modal card breakdownModal" onMouseDown={e=>e.stopPropagation()}>
+  <div className="modalHeader"><div><span className="eyebrow">FOCUSOS AI</span><h3>Task breakdown</h3></div><button className="modalClose" onClick={onClose}>×</button></div>
+  <p className="breakdownIntro">Suggested steps for <strong>{breakdown.task.title}</strong>. Review them before adding them to your task list.</p>
+  <div className="breakdownList">{breakdown.steps.map((step,index)=><div className="breakdownStep" key={index}><span>{index+1}</span><strong>{step.title}</strong><small>{step.minutes}m</small></div>)}</div>
+  <div className="modalActions"><button className="secondary" onClick={onClose}>Discard</button><button className="primary" onClick={onAdd}>Add {breakdown.steps.length} tasks</button></div>
+ </div></div>;
+}
+
+function TaskModal({task,onClose,onSave,onDelete,onFocus,onBreakdown}:{task:Task;onClose:()=>void;onSave:(task:Task)=>void;onDelete:(id:string)=>void;onFocus:()=>void;onBreakdown:()=>void}){
  const [draft,setDraft]=useState(task);
  return <div className="modalBackdrop" onMouseDown={onClose}><div className="modal card" onMouseDown={e=>e.stopPropagation()}>
   <div className="modalHeader"><div><span className="eyebrow">TASK</span><h3>Edit task</h3></div><button className="modalClose" onClick={onClose}>×</button></div>
   <label>Task name<input value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
   <div className="formGrid"><label>Priority<select value={draft.priority} onChange={e=>setDraft({...draft,priority:e.target.value as Priority})}><option>Low</option><option>Medium</option><option>High</option></select></label><label>Minutes<input type="number" min="5" step="5" value={draft.minutes} onChange={e=>setDraft({...draft,minutes:Math.max(5,Number(e.target.value)||5)})}/></label></div>
-  <div className="modalActions"><button className="dangerButton" onClick={()=>onDelete(task.id)}>Delete</button><div><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={()=>onSave(draft)}>Save changes</button><button className="primary" onClick={onFocus}>Start focus</button></div></div>
+  <div className="modalActions"><button className="dangerButton" onClick={()=>onDelete(task.id)}>Delete</button><div><button className="secondary" onClick={onBreakdown}>AI break down</button><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={()=>onSave(draft)}>Save changes</button><button className="primary" onClick={onFocus}>Start focus</button></div></div>
  </div></div>
 }
 
