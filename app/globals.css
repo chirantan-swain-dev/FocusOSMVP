@@ -16,3 +16,5 @@
 .authError{background:#fff3f3;border:1px solid #f0cccc;color:#b33a42;border-radius:9px;padding:10px;font-size:11px;margin-bottom:12px}
 .authMessage{background:#f1f8f4;border:1px solid #cce6d6;color:#31734d;border-radius:9px;padding:10px;font-size:11px;margin-bottom:12px}
 @media(max-width:600px){.authShell{padding:14px}.authCard{padding:24px}}
+
+.recommendationReason{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;padding:9px 11px;border:1px solid #e5e6fb;background:#fafaff;border-radius:10px;color:#778197;font-size:11px}.recommendationReason span{font-weight:800;color:#5556c9}.recommendationReason strong{font-weight:650;color:#5f687b}
