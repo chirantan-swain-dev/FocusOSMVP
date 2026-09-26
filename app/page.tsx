@@ -279,6 +279,9 @@ function FocusOSApp({userId}:{userId:string}){
   </section>
 
   {selectedTask&&<TaskModal task={selectedTask} onClose={()=>setSelectedTask(null)} onSave={saveTask} onDelete={deleteTask} onFocus={()=>{startTask(selectedTask);setSelectedTask(null)}} onBreakdown={()=>requestBreakdown(selectedTask)}/>} {breakdownLoading&&<div className="modalBackdrop"><div className="modal card breakdownLoading"><span className="eyebrow">FOCUSOS AI</span><h3>Breaking this task down…</h3><p>Turning it into small, actionable steps.</p></div></div>} {breakdownError&&<div className="modalBackdrop" onMouseDown={()=>setBreakdownError("")}><div className="modal card" onMouseDown={e=>e.stopPropagation()}><div className="modalHeader"><div><span className="eyebrow">FOCUSOS AI</span><h3>Breakdown unavailable</h3></div><button className="modalClose" onClick={()=>setBreakdownError("")}>×</button></div><div className="authError">{breakdownError}</div><button className="primary" onClick={()=>setBreakdownError("")}>Close</button></div></div>} {breakdown&&<BreakdownModal breakdown={breakdown} onClose={()=>setBreakdown(null)} onAdd={addBreakdownSteps}/>}
+  {planLoading&&<div className="modalBackdrop"><div className="modal card breakdownLoading"><span className="eyebrow">FOCUSOS AI</span><h3>Building your plan…</h3><p>Turning your goal into manageable milestones and tasks.</p></div></div>}
+  {planError&&<div className="modalBackdrop" onMouseDown={()=>setPlanError("")}><div className="modal card" onMouseDown={e=>e.stopPropagation()}><div className="modalHeader"><div><span className="eyebrow">FOCUSOS AI</span><h3>Plan unavailable</h3></div><button className="modalClose" onClick={()=>setPlanError("")}>×</button></div><div className="authError">{planError}</div><button className="primary" onClick={()=>setPlanError("")}>Close</button></div></div>}
+  {plan&&<PlanModal plan={plan} onClose={()=>setPlan(null)} onAdd={addPlanTasks}/>}
  </main>;
 }
 
