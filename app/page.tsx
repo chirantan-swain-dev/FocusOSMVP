@@ -49,7 +49,7 @@ function FocusOSApp({userId}:{userId:string}){
   const timer=setInterval(()=>setSeconds(v=>{
    if(v<=1){
     setRunning(false);
-    if(focusedTaskId)setTasks(prev=>prev.map(t=>t.id===focusedTaskId?{...t,done:true}:t));
+    if(focusedTaskId){setTasks(prev=>prev.map(t=>t.id===focusedTaskId?{...t,done:true}:t));if(supabase)void supabase.from("tasks").update({done:true}).eq("id",focusedTaskId).eq("user_id",userId);}
     setFocusedTaskId(null);
     return 1500;
    }
@@ -73,8 +73,15 @@ function FocusOSApp({userId}:{userId:string}){
  };
  const submitTask=()=>{addTask(newTask);setNewTask("")};
  const quickAdd=()=>{addTask(quickTask);setQuickTask("")};
- const toggleTask=(id:number)=>setTasks(v=>v.map(t=>t.id===id?{...t,done:!t.done}:t));
- const deleteTask=(id:number)=>{setTasks(v=>v.filter(t=>t.id!==id));if(selectedTask?.id===id)setSelectedTask(null)};
+ const toggleTask=async(id:string)=>{
+  const task=tasks.find(t=>t.id===id);if(!task)return;
+  const done=!task.done;setTasks(v=>v.map(t=>t.id===id?{...t,done}:t));
+  if(supabase)await supabase.from("tasks").update({done}).eq("id",id).eq("user_id",userId);
+ };
+ const deleteTask=async(id:string)=>{
+  setTasks(v=>v.filter(t=>t.id!==id));if(selectedTask?.id===id)setSelectedTask(null);
+  if(supabase)await supabase.from("tasks").delete().eq("id",id).eq("user_id",userId);
+ };
  const saveTask=async(updated:Task)=>{
   setTasks(v=>v.map(t=>t.id===updated.id?updated:t));setSelectedTask(null);
   if(supabase)await supabase.from("tasks").update({title:updated.title,priority:updated.priority,minutes:updated.minutes,done:updated.done}).eq("id",updated.id).eq("user_id",userId);
